@@ -35,28 +35,108 @@ def generate_function_ids():
             yield (function.getName(), function.getEntryPoint(), "0x" + function_id)
 
 
+def get_best_matching_datatype(datatype, name, dataTypeManager):
+    candidates = []
+    dataTypeManager.findDataTypes(name, candidates)
+    if len(candidates) == 1:
+        datatype = candidates[0]
+    return datatype
+
+
+def deserialize_arguments(parameters, arguments, program):
+    dataTypeManager = program.getDataTypeManager()
+    for idx, argument in enumerate(arguments):
+        parameter = None
+        if len(parameters) > idx:
+            parameter = parameters[idx]
+
+        # Determine the datatype
+        dataType = None
+        if parameter:
+            dataType = parameter.getDataType()
+        newDataType = get_best_matching_datatype(
+            dataType,
+            argument["type"],
+            dataTypeManager
+        )
+
+        # Just reuse the old adress (assumption: the FunctionID takes parameter
+        # placement into account)
+        newAdress = None
+        if parameter:
+            newAdress = parameter.getVariableStorage().getVarnodes()[0].getAddress()
+
+        newParameter = ghidra.program.model.listing.ParameterImpl(
+                argument["name"], newDataType, newAdress, program)
+
+        if parameter:
+            parameters[idx] = newParameter
+        else:
+            parameters.append(newParameter)
+
+    return parameters
+
+
 def matching_function(config):
     # type (dict) -> None
     functions_ids_db = config["database"]["functions"]
+
+    program = getState().getCurrentProgram()
+    dataTypeManager = program.getDataTypeManager()
+
     for function_name, function_entrypoint, function_id in generate_function_ids():
         if function_id in list(functions_ids_db):
 
             current_function = fm.getFunctionContaining(function_entrypoint)
-            if function_name != functions_ids_db[function_id]:
+            if function_name != functions_ids_db[function_id]["name"]:
+
                 current_function.setName(
-                    functions_ids_db[function_id],
+                    functions_ids_db[function_id]["name"],
                     ghidra.program.model.symbol.SourceType.USER_DEFINED,
                 )
 
-            print(
-                "FunctionEntryPoint: %s\tFunctionID: %s\tOriginalFunctionName: %s\tNewFunctionName: %s"
-                % (
-                    function_entrypoint,
-                    function_id,
-                    function_name,
-                    functions_ids_db[function_id],
+                arguments = deserialize_arguments(
+                    current_function.getParameters(),
+                    functions_ids_db[function_id]["arguments"],
+                    program
                 )
-            )
+
+                current_function.replaceParameters(
+                    ghidra.program.model.listing.Function.FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS,
+                    0,
+                    ghidra.program.model.symbol.SourceType.ANALYSIS,
+                    arguments
+                )
+
+                newReturnDatatype = get_best_matching_datatype(
+                    current_function.getReturn().getDataType(),
+                    functions_ids_db[function_id]["return"],
+                    dataTypeManager
+                )
+                current_function.setReturn(
+                    newReturnDatatype,
+                    current_function.getReturn().getVariableStorage(),
+                    ghidra.program.model.symbol.SourceType.ANALYSIS
+                )
+
+                print(
+                    "FunctionEntryPoint: %s\tFunctionID: %s\tOriginalFunctionName: %s\tNewFunctionName: %s"
+                    % (
+                        function_entrypoint,
+                        function_id,
+                        function_name,
+                        functions_ids_db[function_id]["name"],
+                    )
+                )
+            else:
+                print(
+                    "FunctionEntryPoint: %s\tFunctionID: %s\tKeptFunctionName: %s"
+                    % (
+                        function_entrypoint,
+                        function_id,
+                        function_name,
+                    )
+                )
 
 
 def _load_function_ids_database(config_path):
