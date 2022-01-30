@@ -45,13 +45,13 @@ class FunctionIdDb(object):
                 ):
                     print(
                         "[+] FunctionName: %s\tFunctionID: %s added to database"
-                        % (entry.values()[0], entry.keys()[0])
+                        % (entry.values()[0]["name"], entry.keys()[0])
                     )
                     current_db["database"]["functions"].update(entry)
                 else:
                     print(
                         "[i] FunctionName: %s with FunctionID: %s is already known to the current database, skipping ..."
-                        % (entry.values()[0], entry.keys()[0])
+                        % (entry.values()[0]["name"], entry.keys()[0])
                     )
         current_db["database"]["entries"] = len(
             list(current_db["database"]["functions"])
@@ -61,6 +61,13 @@ class FunctionIdDb(object):
 
         with open(self.config_path, "w") as f:
             f.write(json.dumps(current_db, indent=2))
+
+
+def serialize_varnodes(varnodes):
+    if len(varnodes) == 0:
+        return None
+    varnode = varnodes[0]
+    return {"address": varnode.getAddress().getAddressSpace().getName()+":"+str(varnode.getAddress().getOffset()), "size": varnode.getSize()}
 
 
 def generate_function_id_hash(db):
@@ -83,7 +90,23 @@ def generate_function_id_hash(db):
             % (fn_address, fn.getName())
         )
     else:
-        db.update_database([{"0x" + function_id: fn.getName()}])
+        arguments = []
+        for p in fn.getParameters():
+            arguments.append({
+                "name": p.getName(),
+                "type": p.getDataType().getName(),
+                "storage": serialize_varnodes(p.getVariableStorage().getVarnodes())
+            })
+        db.update_database([{
+            "0x" + function_id: {
+                "name": fn.getName(),
+                "arguments": arguments,
+                "return": {
+                    "type": fn.getReturn().getDataType().getName(),
+                    "storage": serialize_varnodes(fn.getReturn().getVariableStorage().getVarnodes())
+                }
+            }
+        }])
 
 
 def main():
