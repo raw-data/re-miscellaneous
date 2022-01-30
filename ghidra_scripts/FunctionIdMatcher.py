@@ -37,7 +37,7 @@ def generate_function_ids():
 
 def get_best_matching_datatype(datatype, name, dataTypeManager):
     candidates = []
-    datatype = dataTypeManager.findDataTypes(name, candidates)
+    dataTypeManager.findDataTypes(name, candidates)
     if len(candidates) == 1:
         datatype = candidates[0]
     return datatype
@@ -46,17 +46,34 @@ def get_best_matching_datatype(datatype, name, dataTypeManager):
 def deserialize_arguments(parameters, arguments, program):
     dataTypeManager = program.getDataTypeManager()
     for idx, argument in enumerate(arguments):
-        # TODO: handle if not all parameters were detected (i.e. the parameter code
-        # of "parameters" is smaller than the length of "arguments")
+        parameter = None
+        if len(parameters) > idx:
+            parameter = parameters[idx]
+
+        # Determine the datatype
+        dataType = None
+        if parameter:
+            dataType = parameter.getDataType()
         newDataType = get_best_matching_datatype(
-            parameters[idx].getDataType(),
-            argument["type"], dataTypeManager
+            dataType,
+            argument["type"],
+            dataTypeManager
         )
 
-        newAdress = parameters[idx].getVariableStorage().getVarnodes()[0].getAddress()
+        # Just reuse the old adress (assumption: the FunctionID takes parameter
+        # placement into account)
+        newAdress = None
+        if parameter:
+            newAdress = parameter.getVariableStorage().getVarnodes()[0].getAddress()
 
-        parameters[idx] = ghidra.program.model.listing.ParameterImpl(
-            argument["name"], newDataType, newAdress, program)
+        newParameter = ghidra.program.model.listing.ParameterImpl(
+                argument["name"], newDataType, newAdress, program)
+
+        if parameter:
+            parameters[idx] = newParameter
+        else:
+            parameters.append(newParameter)
+
     return parameters
 
 
@@ -93,7 +110,7 @@ def matching_function(config):
 
                 newReturnDatatype = get_best_matching_datatype(
                     current_function.getReturn().getDataType(),
-                    functions_ids_db[function_id]["return"]["type"],
+                    functions_ids_db[function_id]["return"],
                     dataTypeManager
                 )
                 current_function.setReturn(

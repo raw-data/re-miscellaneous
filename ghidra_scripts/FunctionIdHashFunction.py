@@ -94,17 +94,13 @@ def generate_function_id_hash(db):
         for p in fn.getParameters():
             arguments.append({
                 "name": p.getName(),
-                "type": p.getDataType().getName(),
-                "storage": serialize_varnodes(p.getVariableStorage().getVarnodes())
+                "type": p.getDataType().getName()
             })
         db.update_database([{
             "0x" + function_id: {
                 "name": fn.getName(),
                 "arguments": arguments,
-                "return": {
-                    "type": fn.getReturn().getDataType().getName(),
-                    "storage": serialize_varnodes(fn.getReturn().getVariableStorage().getVarnodes())
-                }
+                "return": fn.getReturn().getDataType().getName()
             }
         }])
 
